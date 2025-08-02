@@ -166,7 +166,7 @@ EOF
     # Get project root directory and read default prompt
     local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
     local prompt_path="$project_root/.cogent/templates/default-prompt.md"
-    local prompt=$(cat "$prompt_path" | sed "s|{{FILENAME}}|$(basename "$file_path")|g")
+    local prompt=$(cat "$prompt_path")
     
     # Use proper Claude Code hook feedback mechanism
     cat <<EOF
