@@ -18,8 +18,6 @@ NC='\033[0m' # No Color
 # Configuration
 REPO_URL="https://raw.githubusercontent.com/IsaacWLloyd/cogent-autodoc/main"
 SCRIPT_URL="${REPO_URL}/scripts/create-documentation.sh"
-TEMPLATE_URL="${REPO_URL}/scripts/templates/documentation.md"
-PROMPT_URL="${REPO_URL}/scripts/templates/documentation-prompt.txt"
 INSTALL_DIR=".cogent"
 CLAUDE_SETTINGS_DIR=".claude"
 CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_DIR}/settings.json"
@@ -132,13 +130,6 @@ setup_cogent_directory() {
         log_warning "$INSTALL_DIR directory already exists"
     fi
     
-    # Create templates directory
-    local templates_dir="${INSTALL_DIR}/templates"
-    if [[ ! -d "$templates_dir" ]]; then
-        mkdir -p "$templates_dir"
-        log_success "Created templates directory"
-    fi
-    
     # Download the documentation script
     local script_path="${INSTALL_DIR}/create-documentation.sh"
     log_info "Downloading documentation script..."
@@ -148,28 +139,6 @@ setup_cogent_directory() {
         log_success "Documentation script installed and made executable"
     else
         log_error "Failed to download documentation script"
-        exit 1
-    fi
-    
-    # Download the documentation template
-    local template_path="${templates_dir}/documentation.md"
-    log_info "Downloading documentation template..."
-    
-    if download_file "$TEMPLATE_URL" "$template_path"; then
-        log_success "Documentation template installed"
-    else
-        log_error "Failed to download documentation template"
-        exit 1
-    fi
-    
-    # Download the documentation prompt
-    local prompt_path="${templates_dir}/documentation-prompt.txt"
-    log_info "Downloading documentation prompt..."
-    
-    if download_file "$PROMPT_URL" "$prompt_path"; then
-        log_success "Documentation prompt installed"
-    else
-        log_error "Failed to download documentation prompt"
         exit 1
     fi
 }
@@ -444,8 +413,7 @@ show_usage_instructions() {
     echo "   .cogent/[relative-path-to-file].md"
     echo
     echo -e "${YELLOW}3. Customization:${NC}"
-    echo "   - Edit .cogent/templates/documentation.md to modify the template"
-    echo "   - Edit .cogent/templates/documentation-prompt.txt to modify the prompt"
+    echo "   - Edit .cogent/create-documentation.sh to modify templates"
     echo "   - Documentation templates are auto-filled by Claude"
     echo "   - Check .claude/settings.json for hook configuration"
     echo
