@@ -307,7 +307,7 @@ setup_claude_settings() {
         if ! validate_json "$CLAUDE_SETTINGS_FILE"; then
             log_error "Existing settings.json contains invalid JSON"
             echo -n "Attempt to fix and continue? (y/N): "
-            read -r response
+            read -r response < /dev/tty
             if [[ ! "$response" =~ ^[Yy]$ ]]; then
                 log_info "Skipping Claude settings update"
                 return 0
@@ -475,7 +475,7 @@ interactive_setup() {
     echo "2. Selective (docs only for important files)" 
     echo "3. Minimal (basic structure only)"
     echo -n "Choose documentation level (1-3, default: 1): "
-    read -r doc_level
+    read -r doc_level < /dev/tty
     doc_level=${doc_level:-1}
     
     # Ask about file exclusions
@@ -483,13 +483,13 @@ interactive_setup() {
     echo -e "${YELLOW}File Exclusions:${NC}"
     echo "Current exclusions: .md, .json, .yml, node_modules, dist, __pycache__"
     echo -n "Add custom exclusions (comma-separated, or press Enter to skip): "
-    read -r custom_exclusions
+    read -r custom_exclusions < /dev/tty
     
     # Ask about template customization
     echo
     echo -e "${YELLOW}Template Customization:${NC}"
     echo -n "Customize documentation template for $project_type? (y/N): "
-    read -r customize_template
+    read -r customize_template < /dev/tty
     
     if [[ "$customize_template" =~ ^[Yy]$ ]]; then
         log_info "Template customization will be available in future versions"
@@ -536,7 +536,7 @@ main() {
     # Ask if user wants interactive setup
     echo
     echo -n "Run interactive setup for advanced configuration? (y/N): "
-    read -r interactive
+    read -r interactive < /dev/tty
     
     if [[ "$interactive" =~ ^[Yy]$ ]]; then
         interactive_setup "$project_type"
