@@ -450,6 +450,63 @@ create_gitignore_entries() {
     fi
 }
 
+update_claude_md() {
+    log_step "Updating CLAUDE.md..."
+    
+    local claude_reminder="
+## Documentation
+Check \`.cogent/\` for existing documentation before making changes to files."
+    
+    if [[ -f "CLAUDE.md" ]]; then
+        # Check if our reminder already exists
+        if grep -q "Check \`.cogent/\` for existing documentation" CLAUDE.md; then
+            log_info "CLAUDE.md already contains Cogent AutoDoc reminder"
+            return 0
+        fi
+        
+        # Create a backup
+        cp CLAUDE.md CLAUDE.md.backup
+        
+        # Find the first # heading and insert our reminder after it
+        # This preserves the user's main header
+        if grep -q "^# " CLAUDE.md; then
+            # Use awk to insert after the first # heading
+            awk -v reminder="$claude_reminder" '
+                /^# / && !found {
+                    print $0
+                    print reminder
+                    found = 1
+                    next
+                }
+                {print}
+            ' CLAUDE.md > CLAUDE.md.tmp
+            
+            mv CLAUDE.md.tmp CLAUDE.md
+            log_success "Added Cogent AutoDoc reminder to CLAUDE.md"
+        else
+            # No # heading found, append to the end
+            echo "$claude_reminder" >> CLAUDE.md
+            log_success "Appended Cogent AutoDoc reminder to CLAUDE.md"
+        fi
+    else
+        # Create new CLAUDE.md
+        log_info "Creating new CLAUDE.md with Cogent AutoDoc reminder"
+        cat > CLAUDE.md << 'EOF'
+# Project Documentation
+
+## Documentation
+Check `.cogent/` for existing documentation before making changes to files.
+
+## Project Overview
+[Add your project description here]
+
+## Key Guidelines
+[Add your project-specific guidelines here]
+EOF
+        log_success "Created CLAUDE.md with Cogent AutoDoc reminder"
+    fi
+}
+
 show_usage_instructions() {
     echo
     log_success "Installation complete!"
@@ -469,7 +526,7 @@ show_usage_instructions() {
     echo "   - Check .claude/settings.json for hook configuration"
     echo
     echo -e "${YELLOW}4. Project Integration:${NC}"
-    echo "   - Add to CLAUDE.md: \"Check .cogent/ for existing documentation\""
+    echo "   - CLAUDE.md has been updated to reference .cogent/ documentation"
     echo "   - Commit .cogent/ to share docs with your team"
     echo
     echo -e "${GREEN}Example workflow:${NC}"
@@ -546,6 +603,7 @@ main() {
     setup_cogent_directory
     setup_claude_settings
     create_gitignore_entries
+    update_claude_md
     
     # Ask if user wants interactive setup
     echo
