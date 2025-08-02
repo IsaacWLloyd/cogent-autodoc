@@ -97,7 +97,7 @@ create_documentation_template() {
     # Check if template file exists
     if [ ! -f "$template_file" ]; then
         log "Error: Template file not found: $template_file"
-        exit 1
+        return 1
     fi
     
     # Copy template to destination
@@ -115,7 +115,8 @@ main() {
     local json_input=""
     if [ -t 0 ]; then
         log "No input provided"
-        exit 1
+        echo "{}"
+        exit 0
     else
         json_input=$(cat)
     fi
@@ -125,7 +126,8 @@ main() {
     
     if [ -z "$file_path" ]; then
         log "Error: Could not extract file_path from input"
-        exit 1
+        echo "{}"
+        exit 0
     fi
     
     log "Processing file: $file_path"
@@ -135,12 +137,14 @@ main() {
        [[ "$file_path" =~ /\.(cogent|claude|git)/ ]] || \
        [[ "$file_path" =~ /(node_modules|dist|__pycache__)/ ]]; then
         log "Skipping file based on exclusion rules: $file_path"
+        echo "{}"
         exit 0
     fi
     
     # Check if file exists
     if [ ! -f "$file_path" ]; then
         log "Warning: File does not exist: $file_path"
+        echo "{}"
         exit 0
     fi
     
@@ -156,7 +160,8 @@ main() {
     # Check if prompt file exists
     if [ ! -f "$prompt_file" ]; then
         log "Error: Prompt file not found: $prompt_file"
-        exit 1
+        echo "{}"
+        exit 0
     fi
     
     # Read and prepare prompt
@@ -177,7 +182,11 @@ EOF
     fi
     
     # Create documentation template
-    create_documentation_template "$file_path" "$doc_path"
+    if ! create_documentation_template "$file_path" "$doc_path"; then
+        log "Failed to create documentation template"
+        echo "{}"
+        exit 0
+    fi
     
     log "Created documentation template: $doc_path"
     
