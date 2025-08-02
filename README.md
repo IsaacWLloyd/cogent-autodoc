@@ -21,13 +21,13 @@ Transform your development workflow with AI-powered documentation that writes it
 Run this command in your project root:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/cogent-autodoc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/IsaacWLloyd/cogent-autodoc/main/install.sh | bash
 ```
 
 Or for manual installation:
 
 ```bash
-wget https://raw.githubusercontent.com/yourusername/cogent-autodoc/main/install.sh
+wget https://raw.githubusercontent.com/IsaacWLloyd/cogent-autodoc/main/install.sh
 chmod +x install.sh
 ./install.sh
 ```
@@ -181,7 +181,7 @@ Customize exclusions in the interactive setup or by editing the hook script.
 
 We welcome contributions! Here's how to help:
 
-1. **Report Issues**: Found a bug or have a feature request? [Open an issue](https://github.com/yourusername/cogent-autodoc/issues)
+1. **Report Issues**: Found a bug or have a feature request? [Open an issue](https://github.com/IsaacWLloyd/cogent-autodoc/issues)
 2. **Improve Templates**: Submit better documentation templates for specific languages/frameworks
 3. **Add Language Support**: Extend file type detection and templates
 4. **Testing**: Help test across different environments and project types
@@ -189,7 +189,7 @@ We welcome contributions! Here's how to help:
 ### Development Setup
 
 ```bash
-git clone https://github.com/yourusername/cogent-autodoc.git
+git clone https://github.com/IsaacWLloyd/cogent-autodoc.git
 cd cogent-autodoc
 # Test the installer
 ./install.sh --help
@@ -264,8 +264,8 @@ Generated documentation includes:
 ### Getting Help
 
 - 📖 **Documentation**: Check the generated docs in `.cogent/`
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/cogent-autodoc/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/cogent-autodoc/discussions)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/IsaacWLloyd/cogent-autodoc/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/IsaacWLloyd/cogent-autodoc/discussions)
 - 📧 **Email**: [your-email@example.com](mailto:your-email@example.com)
 
 ## 📄 License
@@ -283,7 +283,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 **Ready to transform your development workflow?**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/cogent-autodoc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/IsaacWLloyd/cogent-autodoc/main/install.sh | bash
 ```
 
 *Start generating intelligent documentation in under 30 seconds.*

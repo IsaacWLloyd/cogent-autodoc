@@ -2,7 +2,7 @@
 
 # Cogent AutoDoc Installer
 # Automated documentation generation for Claude Code projects
-# https://github.com/yourusername/cogent-autodoc
+# https://github.com/IsaacWLloyd/cogent-autodoc
 
 set -euo pipefail
 
@@ -16,7 +16,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_URL="https://raw.githubusercontent.com/yourusername/cogent-autodoc/main"
+REPO_URL="https://raw.githubusercontent.com/IsaacWLloyd/cogent-autodoc/main"
 SCRIPT_URL="${REPO_URL}/scripts/create-documentation.sh"
 INSTALL_DIR=".cogent"
 CLAUDE_SETTINGS_DIR=".claude"
@@ -143,6 +143,122 @@ setup_cogent_directory() {
     fi
 }
 
+# JSON utility functions
+validate_json() {
+    local json_file="$1"
+    if command -v python3 &> /dev/null; then
+        python3 -m json.tool "$json_file" >/dev/null 2>&1
+    elif command -v node &> /dev/null; then
+        node -e "JSON.parse(require('fs').readFileSync('$json_file', 'utf8'))" >/dev/null 2>&1
+    else
+        # Basic validation - check for balanced braces
+        local open_braces=$(grep -o '{' "$json_file" | wc -l)
+        local close_braces=$(grep -o '}' "$json_file" | wc -l)
+        [[ "$open_braces" -eq "$close_braces" ]]
+    fi
+}
+
+merge_json_settings() {
+    local settings_file="$1"
+    local temp_file="${settings_file}.tmp"
+    
+    # Our hook configuration to add
+    local new_hook='{
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.cogent/create-documentation.sh"
+          }
+        ]
+      }'
+    
+    if command -v jq &> /dev/null; then
+        # Use jq for proper JSON merging
+        log_info "Using jq for safe JSON merging..."
+        
+        # Check if hooks.PostToolUse already exists
+        if jq -e '.hooks.PostToolUse' "$settings_file" >/dev/null 2>&1; then
+            # PostToolUse exists, append to it
+            jq --argjson newhook "$new_hook" '.hooks.PostToolUse += [$newhook]' "$settings_file" > "$temp_file"
+        elif jq -e '.hooks' "$settings_file" >/dev/null 2>&1; then
+            # hooks exists but no PostToolUse, create it
+            jq --argjson newhook "$new_hook" '.hooks.PostToolUse = [$newhook]' "$settings_file" > "$temp_file"
+        else
+            # No hooks at all, create the whole structure
+            jq --argjson newhook "$new_hook" '.hooks = { "PostToolUse": [$newhook] }' "$settings_file" > "$temp_file"
+        fi
+        
+        # Validate the result
+        if validate_json "$temp_file"; then
+            mv "$temp_file" "$settings_file"
+            log_success "Successfully merged hook configuration with jq"
+        else
+            rm -f "$temp_file"
+            log_error "JSON merge failed validation"
+            return 1
+        fi
+    else
+        # Fallback: Python-based JSON merging
+        log_info "Using Python for JSON merging (jq not available)..."
+        
+        python3 << EOF
+import json
+import sys
+
+try:
+    # Read existing settings
+    with open('$settings_file', 'r') as f:
+        settings = json.load(f)
+    
+    # Ensure hooks structure exists
+    if 'hooks' not in settings:
+        settings['hooks'] = {}
+    if 'PostToolUse' not in settings['hooks']:
+        settings['hooks']['PostToolUse'] = []
+    
+    # Our new hook
+    new_hook = {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+            {
+                "type": "command",
+                "command": "\$CLAUDE_PROJECT_DIR/.cogent/create-documentation.sh"
+            }
+        ]
+    }
+    
+    # Check if our hook already exists (avoid duplicates)
+    hook_exists = False
+    for hook in settings['hooks']['PostToolUse']:
+        if (hook.get('matcher') == 'Edit|Write|MultiEdit' and 
+            len(hook.get('hooks', [])) > 0 and
+            'create-documentation.sh' in str(hook['hooks'][0].get('command', ''))):
+            hook_exists = True
+            break
+    
+    if not hook_exists:
+        settings['hooks']['PostToolUse'].append(new_hook)
+    
+    # Write back
+    with open('$settings_file', 'w') as f:
+        json.dump(settings, f, indent=2)
+    
+    print("SUCCESS")
+except Exception as e:
+    print(f"ERROR: {e}")
+    sys.exit(1)
+EOF
+        
+        if [[ $? -eq 0 ]]; then
+            log_success "Successfully merged hook configuration with Python"
+        else
+            log_error "Python JSON merge failed"
+            return 1
+        fi
+    fi
+}
+
 setup_claude_settings() {
     log_step "Setting up Claude Code hooks..."
     
@@ -154,50 +270,78 @@ setup_claude_settings() {
     
     # Handle existing settings.json
     if [[ -f "$CLAUDE_SETTINGS_FILE" ]]; then
-        log_warning "Existing Claude settings found at $CLAUDE_SETTINGS_FILE"
-        echo -n "Do you want to backup and update it? (y/N): "
-        read -r response
+        log_info "Existing Claude settings found at $CLAUDE_SETTINGS_FILE"
         
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            # Create backup
-            local backup_file="${CLAUDE_SETTINGS_FILE}.backup.$(date +%s)"
-            cp "$CLAUDE_SETTINGS_FILE" "$backup_file"
-            log_success "Backup created at $backup_file"
-            
-            # Check if hooks already exist
-            if grep -q '"hooks"' "$CLAUDE_SETTINGS_FILE"; then
-                log_warning "Hooks configuration already exists in settings.json"
-                log_info "Please manually merge the hook configuration:"
-                cat << EOF
-
-Add this to your existing hooks configuration:
-
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\$CLAUDE_PROJECT_DIR/.cogent/create-documentation.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-EOF
+        # Validate existing JSON
+        if ! validate_json "$CLAUDE_SETTINGS_FILE"; then
+            log_error "Existing settings.json contains invalid JSON"
+            echo -n "Attempt to fix and continue? (y/N): "
+            read -r response
+            if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                log_info "Skipping Claude settings update"
                 return 0
             fi
-        else
-            log_info "Skipping Claude settings update"
+            
+            # Try to fix common JSON issues
+            sed -i 's/,}/}/g; s/,]/]/g' "$CLAUDE_SETTINGS_FILE"
+            if ! validate_json "$CLAUDE_SETTINGS_FILE"; then
+                log_error "Unable to fix JSON syntax. Please fix manually."
+                return 1
+            fi
+        fi
+        
+        # Create backup
+        local backup_file="${CLAUDE_SETTINGS_FILE}.backup.$(date +%s)"
+        cp "$CLAUDE_SETTINGS_FILE" "$backup_file"
+        log_success "Backup created at $backup_file"
+        
+        # Check if our hook already exists
+        if grep -q "create-documentation.sh" "$CLAUDE_SETTINGS_FILE"; then
+            log_info "Cogent AutoDoc hook already configured"
             return 0
         fi
-    fi
-    
-    # Create or update settings.json
-    cat > "$CLAUDE_SETTINGS_FILE" << 'EOF'
+        
+        # Attempt to merge settings
+        if merge_json_settings "$CLAUDE_SETTINGS_FILE"; then
+            log_success "Successfully merged hook configuration"
+        else
+            log_warning "Automatic merge failed. Manual configuration required:"
+            cat << 'EOF'
+
+Add this hook to your existing PostToolUse hooks array in settings.json:
+
+{
+  "matcher": "Edit|Write|MultiEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$CLAUDE_PROJECT_DIR/.cogent/create-documentation.sh"
+    }
+  ]
+}
+
+Or if you don't have PostToolUse hooks yet, add this to your settings.json:
+
+"hooks": {
+  "PostToolUse": [
+    {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "$CLAUDE_PROJECT_DIR/.cogent/create-documentation.sh"
+        }
+      ]
+    }
+  ]
+}
+EOF
+            return 0
+        fi
+    else
+        # Create new settings.json
+        log_info "Creating new Claude Code settings file"
+        cat > "$CLAUDE_SETTINGS_FILE" << 'EOF'
 {
   "hooks": {
     "PostToolUse": [
@@ -214,8 +358,20 @@ EOF
   }
 }
 EOF
+        log_success "Created new Claude Code settings with hook configuration"
+    fi
     
-    log_success "Claude Code hooks configured"
+    # Final validation
+    if ! validate_json "$CLAUDE_SETTINGS_FILE"; then
+        log_error "Final settings.json validation failed"
+        if [[ -f "${CLAUDE_SETTINGS_FILE}.backup.$(date +%s)" ]]; then
+            log_info "Restoring from backup..."
+            mv "${backup_file}" "$CLAUDE_SETTINGS_FILE"
+        fi
+        return 1
+    fi
+    
+    log_success "Claude Code hooks configured successfully"
 }
 
 create_gitignore_entries() {
@@ -271,7 +427,7 @@ show_usage_instructions() {
     echo "   → Hook automatically creates documentation"
     echo "   → Claude fills in the documentation details"
     echo
-    echo -e "${CYAN}For more information: https://github.com/yourusername/cogent-autodoc${NC}"
+    echo -e "${CYAN}For more information: https://github.com/IsaacWLloyd/cogent-autodoc${NC}"
 }
 
 interactive_setup() {
@@ -369,7 +525,7 @@ case "${1:-}" in
         echo "  --version, -v  Show version information"
         echo "  --uninstall    Remove Cogent AutoDoc from this project"
         echo
-        echo "For more information: https://github.com/yourusername/cogent-autodoc"
+        echo "For more information: https://github.com/IsaacWLloyd/cogent-autodoc"
         exit 0
         ;;
     --version|-v)
