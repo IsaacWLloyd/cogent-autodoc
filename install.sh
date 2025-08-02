@@ -60,26 +60,6 @@ EOF
     echo
 }
 
-# Function to read user input that works with piped installation
-read_input() {
-    local prompt="$1"
-    local default="${2:-}"
-    local input=""
-    
-    # Try to read from /dev/tty first (for direct terminal input)
-    if [[ -t 0 ]] && [[ -e /dev/tty ]]; then
-        echo -n "$prompt"
-        read -r input < /dev/tty || input="$default"
-    else
-        # If /dev/tty is not available, use default
-        echo "$prompt (using default: $default)"
-        input="$default"
-    fi
-    
-    # Return the result (use default if input is empty)
-    echo "${input:-$default}"
-}
-
 check_dependencies() {
     log_step "Checking dependencies..."
     
@@ -326,7 +306,8 @@ setup_claude_settings() {
         # Validate existing JSON
         if ! validate_json "$CLAUDE_SETTINGS_FILE"; then
             log_error "Existing settings.json contains invalid JSON"
-            local response=$(read_input "Attempt to fix and continue? (y/N): " "N")
+            echo -n "Attempt to fix and continue? (y/N): "
+            read -r response < /dev/tty
             if [[ ! "$response" =~ ^[Yy]$ ]]; then
                 log_info "Skipping Claude settings update"
                 return 0
@@ -493,18 +474,22 @@ interactive_setup() {
     echo "1. Comprehensive (detailed docs for all files)"
     echo "2. Selective (docs only for important files)" 
     echo "3. Minimal (basic structure only)"
-    local doc_level=$(read_input "Choose documentation level (1-3, default: 1): " "1")
+    echo -n "Choose documentation level (1-3, default: 1): "
+    read -r doc_level < /dev/tty
+    doc_level=${doc_level:-1}
     
     # Ask about file exclusions
     echo
     echo -e "${YELLOW}File Exclusions:${NC}"
     echo "Current exclusions: .md, .json, .yml, node_modules, dist, __pycache__"
-    local custom_exclusions=$(read_input "Add custom exclusions (comma-separated, or press Enter to skip): " "")
+    echo -n "Add custom exclusions (comma-separated, or press Enter to skip): "
+    read -r custom_exclusions < /dev/tty
     
     # Ask about template customization
     echo
     echo -e "${YELLOW}Template Customization:${NC}"
-    local customize_template=$(read_input "Customize documentation template for $project_type? (y/N): " "N")
+    echo -n "Customize documentation template for $project_type? (y/N): "
+    read -r customize_template < /dev/tty
     
     if [[ "$customize_template" =~ ^[Yy]$ ]]; then
         log_info "Template customization will be available in future versions"
@@ -531,7 +516,8 @@ main() {
     # Check if we're in a valid project directory
     if [[ ! -f "$(pwd)" ]] && [[ ! -d ".git" ]] && [[ ! -f "package.json" ]] && [[ ! -f "requirements.txt" ]] && [[ ! -f "Cargo.toml" ]]; then
         log_warning "This doesn't appear to be a project root directory"
-        local response=$(read_input "Continue anyway? (y/N): " "N")
+        echo -n "Continue anyway? (y/N): "
+        read -r response
         if [[ ! "$response" =~ ^[Yy]$ ]]; then
             log_info "Installation cancelled"
             exit 0
@@ -549,7 +535,8 @@ main() {
     
     # Ask if user wants interactive setup
     echo
-    local interactive=$(read_input "Run interactive setup for advanced configuration? (y/N): " "N")
+    echo -n "Run interactive setup for advanced configuration? (y/N): "
+    read -r interactive < /dev/tty
     
     if [[ "$interactive" =~ ^[Yy]$ ]]; then
         interactive_setup "$project_type"

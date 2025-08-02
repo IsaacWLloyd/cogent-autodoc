@@ -1,5 +1,20 @@
-# Cogent AutoDoc - Documentation templates (commit these)
-.cogent/
+# OS and Editor files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Cogent AutoDoc - Exclude if you don't want to commit docs
-# .cogent/
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Logs
+*.log
+logs/
+
+# Test files
+test-output/
+.test/
