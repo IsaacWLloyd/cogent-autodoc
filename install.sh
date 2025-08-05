@@ -119,6 +119,60 @@ download_file() {
     fi
 }
 
+attempt_global_install() {
+    local source_tool="$1"
+    local global_bin_dir="$HOME/.local/bin"
+    local global_tool_path="$global_bin_dir/cogent-config"
+    
+    # Check if ~/.local/bin exists or can be created
+    if [[ ! -d "$global_bin_dir" ]]; then
+        if mkdir -p "$global_bin_dir" 2>/dev/null; then
+            log_success "Created ~/.local/bin directory"
+        else
+            log_warning "Cannot create ~/.local/bin directory"
+            show_global_install_instructions "$source_tool"
+            return 1
+        fi
+    fi
+    
+    # Try to copy the tool globally
+    if cp "$source_tool" "$global_tool_path" 2>/dev/null; then
+        log_success "Configuration tool installed globally to $global_tool_path"
+        
+        # Check if ~/.local/bin is in PATH
+        if [[ ":$PATH:" != *":$global_bin_dir:"* ]]; then
+            log_warning "~/.local/bin is not in your PATH"
+            echo
+            log_info "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+            echo -e "  ${GREEN}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+            echo
+            log_info "Or reload your shell after installation with:"
+            echo -e "  ${GREEN}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+            echo
+        fi
+        
+        log_info "You can now run 'cogent-config' from anywhere!"
+        return 0
+    else
+        log_warning "Cannot install globally to $global_tool_path"
+        show_global_install_instructions "$source_tool"
+        return 1
+    fi
+}
+
+show_global_install_instructions() {
+    local source_tool="$1"
+    echo
+    log_info "To install cogent-config globally yourself, run:"
+    echo -e "  ${GREEN}mkdir -p ~/.local/bin${NC}"
+    echo -e "  ${GREEN}cp \"$source_tool\" ~/.local/bin/cogent-config${NC}"
+    echo -e "  ${GREEN}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+    echo
+    log_info "Or use the project-local version:"
+    echo -e "  ${GREEN}.cogent/bin/cogent-config --interactive${NC}"
+    echo
+}
+
 setup_cogent_directory() {
     log_step "Setting up .cogent directory..."
     
@@ -200,6 +254,25 @@ setup_cogent_directory() {
         log_error "Failed to download update prompt template"
         exit 1
     fi
+    
+    # Create bin directory and download cogent-config tool
+    local bin_dir="${INSTALL_DIR}/bin"
+    mkdir -p "$bin_dir"
+    
+    local config_tool_url="${REPO_URL}/bin/cogent-config"
+    local config_tool_path="${bin_dir}/cogent-config"
+    
+    log_info "Downloading configuration tool..."
+    if download_file "$config_tool_url" "$config_tool_path"; then
+        chmod +x "$config_tool_path"
+        log_success "Configuration tool installed to .cogent/bin/"
+    else
+        log_error "Failed to download configuration tool"
+        exit 1
+    fi
+    
+    # Attempt global installation
+    attempt_global_install "$config_tool_path"
 }
 
 # JSON utility functions
@@ -468,10 +541,13 @@ show_usage_instructions() {
     echo -e "${YELLOW}2. Documentation files are stored in:${NC}"
     echo "   .cogent/[relative-path-to-file].md"
     echo
-    echo -e "${YELLOW}3. Customization:${NC}"
-    echo "   - Edit .cogent/create-documentation.sh to modify templates"
-    echo "   - Documentation templates are auto-filled by Claude"
-    echo "   - Check .claude/settings.json for hook configuration"
+    echo -e "${YELLOW}3. Configuration:${NC}"
+    echo -e "   ${GREEN}▶ Run: cogent-config --interactive${NC} (if installed globally)"
+    echo -e "   ${GREEN}▶ Or: .cogent/bin/cogent-config --interactive${NC} (project-local)"
+    echo "   - Manage .gitignore settings"
+    echo "   - Configure version history"
+    echo "   - Edit custom templates"
+    echo "   - View and reset settings"
     echo
     echo -e "${YELLOW}4. Project Integration:${NC}"
     echo "   - Add to CLAUDE.md: \"Check .cogent/ for existing documentation\""
@@ -567,6 +643,35 @@ main() {
     fi
     
     show_usage_instructions
+    
+    # Prompt user to configure settings
+    echo
+    echo -e "${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}🚀 Quick Start: Configure Your Settings${NC}"
+    echo -e "${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo
+    echo -n "Would you like to configure Cogent AutoDoc settings now? (Y/n): "
+    read -r configure_now
+    
+    if [[ ! "$configure_now" =~ ^[Nn]$ ]]; then
+        echo
+        log_step "Launching configuration tool..."
+        
+        # Try global command first, then fallback to local
+        if command -v cogent-config &> /dev/null; then
+            cogent-config --interactive
+        else
+            "./${INSTALL_DIR}/bin/cogent-config" --interactive
+        fi
+    else
+        echo
+        log_info "You can configure settings later by running:"
+        if command -v cogent-config &> /dev/null; then
+            echo -e "  ${GREEN}cogent-config --interactive${NC}"
+        else
+            echo -e "  ${GREEN}.cogent/bin/cogent-config --interactive${NC}"
+        fi
+    fi
 }
 
 # Handle command line arguments

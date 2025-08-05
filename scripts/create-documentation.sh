@@ -299,11 +299,47 @@ handle_documentation() {
     fi
 }
 
+# Function to save documentation version to history
+save_to_history() {
+    local doc_path="$1"
+    
+    # Only save history if enabled
+    if [[ "${COGENT_SAVE_HISTORY:-false}" != "true" ]]; then
+        return 0
+    fi
+    
+    # Create history directory
+    local history_dir="${doc_path}_history"
+    mkdir -p "$history_dir"
+    
+    # Generate timestamp for version
+    local timestamp=$(date -u +"%Y%m%d_%H%M%S")
+    local history_file="$history_dir/${timestamp}.md"
+    
+    # Copy current version to history
+    cp "$doc_path" "$history_file"
+    log "Saved version to history: $history_file"
+    
+    # Clean up old versions if we exceed the limit
+    local max_versions="${COGENT_HISTORY_VERSIONS:-10}"
+    local version_count=$(ls -1 "$history_dir"/*.md 2>/dev/null | wc -l)
+    
+    if [[ "$version_count" -gt "$max_versions" ]]; then
+        # Remove oldest files, keeping only the max_versions most recent
+        ls -1t "$history_dir"/*.md | tail -n +$((max_versions + 1)) | xargs rm -f
+        log "Cleaned up old versions, keeping $max_versions most recent"
+    fi
+}
+
 # Function to handle existing documentation update
 handle_existing_documentation() {
     local doc_path="$1"
     
     log "Documentation already exists: $doc_path"
+    
+    # Save current version to history before updating
+    save_to_history "$doc_path"
+    
     # Update the timestamp in existing documentation
     sed -i "s|^\*\*Last Updated:\*\* .*|**Last Updated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")|" "$doc_path"
     

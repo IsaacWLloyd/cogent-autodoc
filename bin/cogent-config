@@ -1,0 +1,535 @@
+#!/bin/bash
+
+# Cogent AutoDoc Configuration Tool
+# Interactive configuration management for Cogent AutoDoc settings
+# https://github.com/IsaacWLloyd/cogent-autodoc
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Configuration
+INSTALL_COMMAND='curl -fsSL https://raw.githubusercontent.com/IsaacWLloyd/cogent-autodoc/main/install.sh | bash'
+
+# Utility functions
+log_info() {
+    echo -e "${BLUE}ℹ${NC} $1" >&2
+}
+
+log_success() {
+    echo -e "${GREEN}✓${NC} $1" >&2
+}
+
+log_warning() {
+    echo -e "${YELLOW}⚠${NC} $1" >&2
+}
+
+log_error() {
+    echo -e "${RED}✗${NC} $1" >&2
+}
+
+log_step() {
+    echo -e "${PURPLE}▶${NC} $1" >&2
+}
+
+print_banner() {
+    echo -e "${CYAN}"
+    cat << 'EOF'
+   ____                        _      ____             __ _       
+  / ___|___   __ _  ___ _ __ __| |_   / ___|___  _ __  / _(_) __ _ 
+ | |   / _ \ / _` |/ _ \ '_ ` _ \| __| | |   / _ \| '_ \| |_| |/ _` |
+ | |__| (_) | (_| |  __/ | | | | |_  | |__| (_) | | | |  _| | (_| |
+  \____\___/ \__, |\___|_| |_| |\__|  \____\___/|_| |_|_| |_|\__, |
+             |___/                                          |___/ 
+EOF
+    echo -e "${NC}"
+    echo -e "${CYAN}Configuration Tool for Cogent AutoDoc${NC}"
+    echo
+}
+
+find_project_root() {
+    local current_dir="$(pwd)"
+    local check_dir="$current_dir"
+    
+    # Walk up directory tree looking for .cogent directory
+    while [[ "$check_dir" != "/" ]]; do
+        if [[ -d "$check_dir/.cogent" ]]; then
+            echo "$check_dir"
+            return 0
+        fi
+        check_dir="$(dirname "$check_dir")"
+    done
+    
+    return 1
+}
+
+check_cogent_project() {
+    log_step "Checking for Cogent AutoDoc installation..."
+    
+    local project_root
+    if ! project_root=$(find_project_root); then
+        log_error "Not in a Cogent AutoDoc project directory"
+        echo
+        log_info "To install Cogent AutoDoc in this project, run:"
+        echo -e "${YELLOW}$INSTALL_COMMAND${NC}"
+        echo
+        exit 1
+    fi
+    
+    if [[ ! -f "$project_root/.cogent/.env" ]] && [[ ! -f "$project_root/.cogent/.env.example" ]]; then
+        log_error "Cogent AutoDoc installation appears corrupted"
+        echo
+        log_info "To reinstall Cogent AutoDoc, run:"
+        echo -e "${YELLOW}$INSTALL_COMMAND${NC}"
+        echo
+        exit 1
+    fi
+    
+    echo "$project_root"
+}
+
+load_env_config() {
+    local project_root="$1"
+    local env_file="$project_root/.cogent/.env"
+    local env_example_file="$project_root/.cogent/.env.example"
+    
+    # Initialize defaults
+    COGENT_TEMPLATE_MAIN=".cogent/templates/default-template.md"
+    COGENT_PROMPT_CREATE=".cogent/templates/default-prompt.md"
+    COGENT_PROMPT_UPDATE=".cogent/templates/update-prompt.md"
+    COGENT_INCLUDE_PATTERNS="*.py,*.js,*.ts,*.tsx,*.jsx,*.java,*.cpp,*.cc,*.cxx,*.c,*.h,*.hpp,*.go,*.rs,*.rb,*.php,*.swift,*.kt,*.kts,*.scala,*.cs,*.vb,*.fs,*.fsx,*.ml,*.mli,*.clj,*.cljs,*.hs,*.lhs,*.elm,*.ex,*.exs,*.erl,*.hrl,*.lua,*.pl,*.pm,*.r,*.R,*.jl,*.nim,*.zig,*.d,*.pas,*.pp,*.inc,*.asm,*.s,*.S,*.f,*.f90,*.f95,*.f03,*.f08,*.for,*.ftn,*.cob,*.cbl,*.ada,*.ads,*.adb,*.vhd,*.vhdl,*.v,*.sv,*.svh,*.sql,*.sh,*.bash,*.zsh,*.fish,*.ps1,*.bat,*.cmd,*.dockerfile,Dockerfile*,*.vim,*.vimrc,*.tmux.conf,*.zshrc,*.bashrc,*.profile"
+    COGENT_SAVE_HISTORY=false
+    COGENT_HISTORY_VERSIONS=10
+    
+    # Load from .env file if it exists
+    if [[ -f "$env_file" ]]; then
+        set -a
+        source "$env_file"
+        set +a
+    elif [[ -f "$env_example_file" ]]; then
+        set -a
+        source "$env_example_file"
+        set +a
+    fi
+}
+
+update_env_setting() {
+    local project_root="$1"
+    local key="$2"
+    local value="$3"
+    local env_file="$project_root/.cogent/.env"
+    
+    # Create .env from .env.example if it doesn't exist
+    if [[ ! -f "$env_file" ]]; then
+        if [[ -f "$project_root/.cogent/.env.example" ]]; then
+            cp "$project_root/.cogent/.env.example" "$env_file"
+            log_success "Created .env file from .env.example"
+        else
+            log_error ".env.example file not found"
+            exit 1
+        fi
+    fi
+    
+    # Update or add the setting
+    if grep -q "^${key}=" "$env_file"; then
+        # Setting exists, update it
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s|^${key}=.*|${key}=${value}|" "$env_file"
+        else
+            sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+        fi
+    else
+        # Setting doesn't exist, add it
+        echo "" >> "$env_file"
+        echo "${key}=${value}" >> "$env_file"
+    fi
+    
+    log_success "Updated ${key}=${value}"
+}
+
+show_current_settings() {
+    local project_root="$1"
+    
+    echo -e "${CYAN}Current Cogent AutoDoc Settings:${NC}"
+    echo
+    echo -e "${YELLOW}Templates:${NC}"
+    echo "  Main Template: $COGENT_TEMPLATE_MAIN"
+    echo "  Create Prompt: $COGENT_PROMPT_CREATE"
+    echo "  Update Prompt: $COGENT_PROMPT_UPDATE"
+    echo
+    echo -e "${YELLOW}File Patterns:${NC}"
+    echo "  Include: $COGENT_INCLUDE_PATTERNS"
+    echo
+    echo -e "${YELLOW}Version History:${NC}"
+    echo "  Save History: $COGENT_SAVE_HISTORY"
+    echo "  Max Versions: $COGENT_HISTORY_VERSIONS"
+    echo
+    echo -e "${YELLOW}Gitignore:${NC}"
+    if [[ -f "$project_root/.gitignore" ]] && grep -q "\.cogent/" "$project_root/.gitignore"; then
+        echo "  .cogent/ ignored: ${GREEN}Yes${NC}"
+    else
+        echo "  .cogent/ ignored: ${RED}No${NC}"
+    fi
+    echo
+}
+
+manage_gitignore() {
+    local project_root="$1"
+    local action="$2"
+    local gitignore_file="$project_root/.gitignore"
+    
+    if [[ "$action" == "enable" ]]; then
+        if [[ -f "$gitignore_file" ]]; then
+            if grep -q "\.cogent/" "$gitignore_file"; then
+                log_info ".cogent/ already in .gitignore"
+            else
+                echo "" >> "$gitignore_file"
+                echo "# Cogent AutoDoc - Generated documentation" >> "$gitignore_file"
+                echo ".cogent/" >> "$gitignore_file"
+                log_success "Added .cogent/ to .gitignore"
+            fi
+        else
+            echo "# Cogent AutoDoc - Generated documentation" > "$gitignore_file"
+            echo ".cogent/" >> "$gitignore_file"
+            log_success "Created .gitignore with .cogent/ entry"
+        fi
+    elif [[ "$action" == "disable" ]]; then
+        if [[ -f "$gitignore_file" ]] && grep -q "\.cogent/" "$gitignore_file"; then
+            # Remove the .cogent/ line and the comment line before it if it exists
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' '/^# Cogent AutoDoc - Generated documentation$/d; /^\.cogent\/$/d' "$gitignore_file"
+            else
+                sed -i '/^# Cogent AutoDoc - Generated documentation$/d; /^\.cogent\/$/d' "$gitignore_file"
+            fi
+            log_success "Removed .cogent/ from .gitignore"
+        else
+            log_info ".cogent/ not found in .gitignore"
+        fi
+    fi
+}
+
+manage_history_setting() {
+    local project_root="$1"
+    local action="$2"
+    local versions="${3:-10}"
+    
+    if [[ "$action" == "enable" ]]; then
+        update_env_setting "$project_root" "COGENT_SAVE_HISTORY" "true"
+        update_env_setting "$project_root" "COGENT_HISTORY_VERSIONS" "$versions"
+    elif [[ "$action" == "disable" ]]; then
+        update_env_setting "$project_root" "COGENT_SAVE_HISTORY" "false"
+    fi
+}
+
+edit_template() {
+    local project_root="$1"
+    local template_type="$2"
+    
+    local source_file=""
+    local env_var=""
+    
+    case "$template_type" in
+        "main")
+            source_file="$project_root/$COGENT_TEMPLATE_MAIN"
+            env_var="COGENT_TEMPLATE_MAIN"
+            ;;
+        "create")
+            source_file="$project_root/$COGENT_PROMPT_CREATE"
+            env_var="COGENT_PROMPT_CREATE"
+            ;;
+        "update")
+            source_file="$project_root/$COGENT_PROMPT_UPDATE"
+            env_var="COGENT_PROMPT_UPDATE"
+            ;;
+        *)
+            log_error "Invalid template type: $template_type"
+            return 1
+            ;;
+    esac
+    
+    if [[ ! -f "$source_file" ]]; then
+        log_error "Source template not found: $source_file"
+        return 1
+    fi
+    
+    echo -n "Enter name for custom template: "
+    read -r custom_name
+    
+    # Sanitize the name
+    custom_name=$(echo "$custom_name" | sed 's/[^a-zA-Z0-9_-]//g')
+    
+    if [[ -z "$custom_name" ]]; then
+        log_error "Invalid template name"
+        return 1
+    fi
+    
+    # Create custom template file
+    local custom_file="$project_root/.cogent/templates/${custom_name}.md"
+    cp "$source_file" "$custom_file"
+    log_success "Created custom template: $custom_file"
+    
+    # Update .env to use custom template
+    local relative_path=".cogent/templates/${custom_name}.md"
+    update_env_setting "$project_root" "$env_var" "$relative_path"
+    
+    # Open in editor
+    local editor="${EDITOR:-nano}"
+    if ! command -v "$editor" &> /dev/null; then
+        editor="nano"
+        if ! command -v "$editor" &> /dev/null; then
+            editor="vi"
+        fi
+    fi
+    
+    log_info "Opening $custom_file in $editor..."
+    "$editor" "$custom_file"
+    
+    log_success "Template editing complete"
+}
+
+reset_to_defaults() {
+    local project_root="$1"
+    local env_file="$project_root/.cogent/.env"
+    local env_example_file="$project_root/.cogent/.env.example"
+    
+    if [[ -f "$env_example_file" ]]; then
+        cp "$env_example_file" "$env_file"
+        log_success "Reset configuration to defaults"
+    else
+        log_error ".env.example file not found"
+        return 1
+    fi
+}
+
+show_interactive_menu() {
+    local project_root="$1"
+    
+    while true; do
+        echo
+        echo -e "${CYAN}Cogent AutoDoc Configuration Menu:${NC}"
+        echo
+        echo "1. View current settings"
+        echo "2. Manage .gitignore (.cogent/ entry)"
+        echo "3. Configure version history"
+        echo "4. Edit custom templates"
+        echo "5. Reset to defaults"
+        echo "6. Exit"
+        echo
+        echo -n "Choose an option (1-6): "
+        read -r choice
+        
+        case "$choice" in
+            1)
+                echo
+                show_current_settings "$project_root"
+                ;;
+            2)
+                echo
+                echo "Current .gitignore status:"
+                if [[ -f "$project_root/.gitignore" ]] && grep -q "\.cogent/" "$project_root/.gitignore"; then
+                    echo -e "  .cogent/ is ${GREEN}ignored${NC}"
+                    echo
+                    echo -n "Remove .cogent/ from .gitignore? (y/N): "
+                    read -r response
+                    if [[ "$response" =~ ^[Yy]$ ]]; then
+                        manage_gitignore "$project_root" "disable"
+                    fi
+                else
+                    echo -e "  .cogent/ is ${RED}not ignored${NC}"
+                    echo
+                    echo -n "Add .cogent/ to .gitignore? (Y/n): "
+                    read -r response
+                    if [[ ! "$response" =~ ^[Nn]$ ]]; then
+                        manage_gitignore "$project_root" "enable"
+                    fi
+                fi
+                ;;
+            3)
+                echo
+                echo "Current history settings:"
+                echo "  Save History: $COGENT_SAVE_HISTORY"
+                echo "  Max Versions: $COGENT_HISTORY_VERSIONS"
+                echo
+                if [[ "$COGENT_SAVE_HISTORY" == "true" ]]; then
+                    echo -n "Disable version history? (y/N): "
+                    read -r response
+                    if [[ "$response" =~ ^[Yy]$ ]]; then
+                        manage_history_setting "$project_root" "disable"
+                        load_env_config "$project_root"
+                    else
+                        echo -n "Change max versions (current: $COGENT_HISTORY_VERSIONS): "
+                        read -r versions
+                        if [[ "$versions" =~ ^[0-9]+$ ]] && [[ "$versions" -gt 0 ]]; then
+                            manage_history_setting "$project_root" "enable" "$versions"
+                            load_env_config "$project_root"
+                        else
+                            log_warning "Invalid number, keeping current setting"
+                        fi
+                    fi
+                else
+                    echo -n "Enable version history? (Y/n): "
+                    read -r response
+                    if [[ ! "$response" =~ ^[Nn]$ ]]; then
+                        echo -n "Max versions to keep (default 10): "
+                        read -r versions
+                        versions=${versions:-10}
+                        if [[ "$versions" =~ ^[0-9]+$ ]] && [[ "$versions" -gt 0 ]]; then
+                            manage_history_setting "$project_root" "enable" "$versions"
+                            load_env_config "$project_root"
+                        else
+                            log_warning "Invalid number, using default (10)"
+                            manage_history_setting "$project_root" "enable" "10"
+                            load_env_config "$project_root"
+                        fi
+                    fi
+                fi
+                ;;
+            4)
+                echo
+                echo "Which template would you like to customize?"
+                echo "1. Main documentation template"
+                echo "2. Create prompt template"
+                echo "3. Update prompt template"
+                echo
+                echo -n "Choose template (1-3): "
+                read -r template_choice
+                
+                case "$template_choice" in
+                    1) edit_template "$project_root" "main" ;;
+                    2) edit_template "$project_root" "create" ;;
+                    3) edit_template "$project_root" "update" ;;
+                    *) log_warning "Invalid choice" ;;
+                esac
+                
+                # Reload config after editing
+                load_env_config "$project_root"
+                ;;
+            5)
+                echo
+                echo -n "Reset all settings to defaults? This will overwrite your .env file. (y/N): "
+                read -r response
+                if [[ "$response" =~ ^[Yy]$ ]]; then
+                    reset_to_defaults "$project_root"
+                    load_env_config "$project_root"
+                fi
+                ;;
+            6)
+                log_info "Goodbye!"
+                exit 0
+                ;;
+            *)
+                log_warning "Invalid choice, please try again"
+                ;;
+        esac
+    done
+}
+
+show_help() {
+    echo "Cogent AutoDoc Configuration Tool"
+    echo
+    echo "Usage: cogent-config [OPTIONS]"
+    echo
+    echo "Options:"
+    echo "  --help, -h                 Show this help message"
+    echo "  --interactive, -i          Interactive configuration menu (recommended)"
+    echo "  --view                     Show current settings"
+    echo "  --gitignore [enable|disable]  Add/remove .cogent/ from .gitignore"
+    echo "  --history [enable|disable] [--versions N]  Configure version history"
+    echo "  --edit-template [main|create|update]  Edit custom templates"
+    echo "  --reset                    Reset configuration to defaults"
+    echo
+    echo "Examples:"
+    echo "  cogent-config --interactive"
+    echo "  cogent-config --view"
+    echo "  cogent-config --gitignore enable"
+    echo "  cogent-config --history enable --versions 5"
+    echo "  cogent-config --edit-template main"
+    echo
+    echo -e "${YELLOW}TIP:${NC} Use --interactive for the best experience with guided menus"
+    echo
+    echo "For more information: https://github.com/IsaacWLloyd/cogent-autodoc"
+}
+
+main() {
+    local project_root
+    project_root=$(check_cogent_project)
+    
+    load_env_config "$project_root"
+    
+    # Handle command line arguments
+    case "${1:-}" in
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --interactive|-i)
+            print_banner
+            show_interactive_menu "$project_root"
+            ;;
+        --view)
+            show_current_settings "$project_root"
+            ;;
+        --gitignore)
+            if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(enable|disable)$ ]]; then
+                manage_gitignore "$project_root" "$2"
+            else
+                log_error "Usage: --gitignore [enable|disable]"
+                exit 1
+            fi
+            ;;
+        --history)
+            if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(enable|disable)$ ]]; then
+                local versions="10"
+                if [[ "$2" == "enable" ]] && [[ "${3:-}" == "--versions" ]] && [[ -n "${4:-}" ]]; then
+                    if [[ "$4" =~ ^[0-9]+$ ]] && [[ "$4" -gt 0 ]]; then
+                        versions="$4"
+                    else
+                        log_error "Invalid version count: $4"
+                        exit 1
+                    fi
+                fi
+                manage_history_setting "$project_root" "$2" "$versions"
+            else
+                log_error "Usage: --history [enable|disable] [--versions N]"
+                exit 1
+            fi
+            ;;
+        --edit-template)
+            if [[ -n "${2:-}" ]] && [[ "$2" =~ ^(main|create|update)$ ]]; then
+                edit_template "$project_root" "$2"
+            else
+                log_error "Usage: --edit-template [main|create|update]"
+                exit 1
+            fi
+            ;;
+        --reset)
+            echo -n "Reset all settings to defaults? This will overwrite your .env file. (y/N): "
+            read -r response
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                reset_to_defaults "$project_root"
+            else
+                log_info "Reset cancelled"
+            fi
+            ;;
+        "")
+            # No arguments, show interactive menu
+            print_banner
+            show_interactive_menu "$project_root"
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+}
+
+# Run main function
+main "$@"
