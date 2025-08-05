@@ -137,6 +137,28 @@ setup_cogent_directory() {
         log_success "Created templates directory"
     fi
     
+    # Create .env file with default paths
+    local env_file="${INSTALL_DIR}/.env"
+    if [[ ! -f "$env_file" ]]; then
+        log_info "Creating .env configuration file..."
+        cat > "$env_file" << 'EOF'
+# Cogent AutoDoc Template Configuration
+# Relative paths from project root
+
+# Main documentation template
+COGENT_TEMPLATE_MAIN="templates/default.md"
+
+# Prompt for creating new documentation
+COGENT_PROMPT_CREATE="templates/default-prompt.md"
+
+# Prompt for updating existing documentation
+COGENT_PROMPT_UPDATE="templates/update-prompt.md"
+EOF
+        log_success "Created .env configuration file"
+    else
+        log_info ".env configuration file already exists"
+    fi
+    
     # Download the documentation script
     local script_path="${INSTALL_DIR}/create-documentation.sh"
     log_info "Downloading documentation script..."
@@ -152,8 +174,10 @@ setup_cogent_directory() {
     # Download template files
     local default_template_url="${REPO_URL}/templates/default.md"
     local default_prompt_url="${REPO_URL}/templates/default-prompt.md"
+    local update_prompt_url="${REPO_URL}/templates/update-prompt.md"
     local default_template_path="${templates_dir}/default.md"
     local default_prompt_path="${templates_dir}/default-prompt.md"
+    local update_prompt_path="${templates_dir}/update-prompt.md"
     
     log_info "Downloading template files..."
     
@@ -168,6 +192,13 @@ setup_cogent_directory() {
         log_success "Default prompt template downloaded"
     else
         log_error "Failed to download default prompt template"
+        exit 1
+    fi
+    
+    if download_file "$update_prompt_url" "$update_prompt_path"; then
+        log_success "Update prompt template downloaded"
+    else
+        log_error "Failed to download update prompt template"
         exit 1
     fi
 }
