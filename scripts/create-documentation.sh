@@ -86,6 +86,25 @@ get_file_type() {
     esac
 }
 
+# Function to load environment variables from .env file
+load_env() {
+    local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+    local env_file="$project_root/.cogent/.env"
+    
+    if [ -f "$env_file" ]; then
+        # Export variables from .env file
+        set -a
+        source "$env_file"
+        set +a
+    else
+        log "Warning: .cogent/.env file not found, using default paths"
+        # Set defaults if .env doesn't exist
+        export COGENT_TEMPLATE_MAIN="templates/default.md"
+        export COGENT_PROMPT_CREATE="templates/default-prompt.md"
+        export COGENT_PROMPT_UPDATE="templates/update-prompt.md"
+    fi
+}
+
 # Function to create documentation template
 create_documentation_template() {
     local file_path="$1"
@@ -94,7 +113,7 @@ create_documentation_template() {
     
     # Get project root directory
     local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-    local template_path="$project_root/.cogent/templates/default.md"
+    local template_path="$project_root/$COGENT_TEMPLATE_MAIN"
     
     # Copy template and replace filename placeholder
     cp "$template_path" "$doc_path"
@@ -104,6 +123,9 @@ create_documentation_template() {
 # Main execution
 main() {
     log "Starting documentation generation hook"
+    
+    # Load environment variables
+    load_env
     
     # Read JSON input from stdin
     local json_input=""
@@ -148,11 +170,18 @@ main() {
         log "Documentation already exists: $doc_path"
         # Update the timestamp in existing documentation
         sed -i "s|^\*\*Last Updated:\*\* .*|**Last Updated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")|" "$doc_path"
+        
+        # Get project root directory and read update prompt
+        local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+        local update_prompt_path="$project_root/$COGENT_PROMPT_UPDATE"
+        local relative_doc_path=$(get_relative_path "$doc_path")
+        local update_prompt=$(cat "$update_prompt_path" | sed "s|{{FILENAME}}|$(basename "$file_path")|g" | sed "s|{{DOC_PATH}}|$relative_doc_path|g" | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
+        
         # Use proper Claude Code hook feedback mechanism
         cat <<EOF
 {
   "decision": "block",
-  "reason": "Documentation already exists at $doc_path. Please update the existing documentation."
+  "reason": "Documentation already exists at $relative_doc_path. $update_prompt"
 }
 EOF
         exit 0
@@ -165,7 +194,7 @@ EOF
     
     # Get project root directory and read default prompt
     local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-    local prompt_path="$project_root/.cogent/templates/default-prompt.md"
+    local prompt_path="$project_root/$COGENT_PROMPT_CREATE"
     local prompt=$(cat "$prompt_path" | sed "s|{{FILENAME}}|$(basename "$file_path")|g" | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
     
     # Use proper Claude Code hook feedback mechanism - block and direct to fill template
