@@ -137,21 +137,24 @@ update_env_setting() {
         fi
     fi
     
+    # Add quotes around value if it contains special characters or spaces
+    local quoted_value="\"${value}\""
+    
     # Update or add the setting
     if grep -q "^${key}=" "$env_file"; then
         # Setting exists, update it
         if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s|^${key}=.*|${key}=${value}|" "$env_file"
+            sed -i '' "s|^${key}=.*|${key}=${quoted_value}|" "$env_file"
         else
-            sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+            sed -i "s|^${key}=.*|${key}=${quoted_value}|" "$env_file"
         fi
     else
         # Setting doesn't exist, add it
         echo "" >> "$env_file"
-        echo "${key}=${value}" >> "$env_file"
+        echo "${key}=${quoted_value}" >> "$env_file"
     fi
     
-    log_success "Updated ${key}=${value}"
+    log_success "Updated ${key}=${quoted_value}"
 }
 
 show_current_settings() {
@@ -187,9 +190,17 @@ manage_gitignore() {
     
     if [[ "$action" == "enable" ]]; then
         if [[ -f "$gitignore_file" ]]; then
-            if grep -q "\.cogent/" "$gitignore_file"; then
+            # Check if .cogent/ is already present (not commented)
+            if grep -q "^[^#]*\.cogent/" "$gitignore_file"; then
                 log_info ".cogent/ already in .gitignore"
             else
+                # Remove any commented .cogent/ entries first
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    sed -i '' '/^#.*\.cogent\//d' "$gitignore_file"
+                else
+                    sed -i '/^#.*\.cogent\//d' "$gitignore_file"
+                fi
+                # Add the entry
                 echo "" >> "$gitignore_file"
                 echo "# Cogent AutoDoc - Generated documentation" >> "$gitignore_file"
                 echo ".cogent/" >> "$gitignore_file"
@@ -201,16 +212,22 @@ manage_gitignore() {
             log_success "Created .gitignore with .cogent/ entry"
         fi
     elif [[ "$action" == "disable" ]]; then
-        if [[ -f "$gitignore_file" ]] && grep -q "\.cogent/" "$gitignore_file"; then
-            # Remove the .cogent/ line and the comment line before it if it exists
+        if [[ -f "$gitignore_file" ]]; then
+            # Remove all .cogent/ entries (commented and uncommented) and related comments
             if [[ "$OSTYPE" == "darwin"* ]]; then
-                sed -i '' '/^# Cogent AutoDoc - Generated documentation$/d; /^\.cogent\/$/d' "$gitignore_file"
+                sed -i '' '/^# Cogent AutoDoc - Generated documentation$/d; /^[^#]*\.cogent\/$/d; /^#.*\.cogent\/$/d' "$gitignore_file"
             else
-                sed -i '/^# Cogent AutoDoc - Generated documentation$/d; /^\.cogent\/$/d' "$gitignore_file"
+                sed -i '/^# Cogent AutoDoc - Generated documentation$/d; /^[^#]*\.cogent\/$/d; /^#.*\.cogent\/$/d' "$gitignore_file"
             fi
-            log_success "Removed .cogent/ from .gitignore"
+            
+            # Check if we actually removed something
+            if ! grep -q "\.cogent/" "$gitignore_file" 2>/dev/null; then
+                log_success "Removed .cogent/ from .gitignore"
+            else
+                log_warning "Some .cogent/ entries may still remain in .gitignore"
+            fi
         else
-            log_info ".cogent/ not found in .gitignore"
+            log_info ".gitignore file not found"
         fi
     fi
 }
@@ -302,6 +319,9 @@ reset_to_defaults() {
     if [[ -f "$env_example_file" ]]; then
         cp "$env_example_file" "$env_file"
         log_success "Reset configuration to defaults"
+        
+        # Ensure .cogent/ is in .gitignore after reset
+        manage_gitignore "$project_root" "enable"
     else
         log_error ".env.example file not found"
         return 1
