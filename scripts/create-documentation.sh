@@ -142,31 +142,111 @@ load_env() {
         export COGENT_PROMPT_UPDATE=".cogent/templates/update-prompt.md"
         export COGENT_INCLUDE_PATTERNS="*.py,*.js,*.ts,*.tsx,*.jsx,*.java,*.cpp,*.cc,*.cxx,*.c,*.h,*.hpp,*.go,*.rs,*.rb,*.php,*.swift,*.kt,*.scala,*.cs"
     fi
+    
+    # Validate required environment variables
+    validate_env_vars
+}
+
+# Function to validate required environment variables
+validate_env_vars() {
+    local missing_vars=()
+    
+    # Check required template and prompt variables
+    [ -z "${COGENT_TEMPLATE_MAIN:-}" ] && missing_vars+=("COGENT_TEMPLATE_MAIN")
+    [ -z "${COGENT_PROMPT_CREATE:-}" ] && missing_vars+=("COGENT_PROMPT_CREATE")
+    [ -z "${COGENT_PROMPT_UPDATE:-}" ] && missing_vars+=("COGENT_PROMPT_UPDATE")
+    [ -z "${COGENT_INCLUDE_PATTERNS:-}" ] && missing_vars+=("COGENT_INCLUDE_PATTERNS")
+    
+    if [ ${#missing_vars[@]} -gt 0 ]; then
+        log "Error: Missing required environment variables: ${missing_vars[*]}"
+        log "Please create .cogent/.env file or check .cogent/.env.example for reference"
+        exit 1
+    fi
+    
+    # Validate that template files exist
+    local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+    local template_files=("$COGENT_TEMPLATE_MAIN" "$COGENT_PROMPT_CREATE" "$COGENT_PROMPT_UPDATE")
+    local missing_files=()
+    
+    for template_file in "${template_files[@]}"; do
+        local full_path="$project_root/$template_file"
+        if [ ! -f "$full_path" ]; then
+            missing_files+=("$full_path")
+        fi
+    done
+    
+    if [ ${#missing_files[@]} -gt 0 ]; then
+        log "Error: Required template files not found:"
+        for file in "${missing_files[@]}"; do
+            log "  - $file"
+        done
+        log "Please ensure all template files exist or update your .cogent/.env configuration"
+        exit 1
+    fi
+}
+
+# Function to substitute template variables in text
+substitute_template_vars() {
+    local text="$1"
+    local filename="$2"
+    local doc_path="${3:-}"
+    
+    # Replace filename placeholder
+    text=$(echo "$text" | sed "s|{{FILENAME}}|$filename|g")
+    
+    # Replace doc path placeholder if provided
+    if [ -n "$doc_path" ]; then
+        text=$(echo "$text" | sed "s|{{DOC_PATH}}|$doc_path|g")
+    fi
+    
+    # Convert to JSON-safe format (escape newlines and quotes)
+    text=$(echo "$text" | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
+    
+    echo "$text"
 }
 
 # Function to create documentation template
 create_documentation_template() {
     local file_path="$1"
     local doc_path="$2"
-    local filename=$(basename "$file_path")
     
-    # Get project root directory
-    local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-    local template_path="$project_root/$COGENT_TEMPLATE_MAIN"
+    local template_path="$PROJECT_ROOT/$COGENT_TEMPLATE_MAIN"
+    
+    # Check if template file exists
+    if [ ! -f "$template_path" ]; then
+        log "Error: Template file not found: $template_path"
+        exit 1
+    fi
     
     # Copy template and replace filename placeholder
-    cp "$template_path" "$doc_path"
-    sed -i "s|{{FILENAME}}|$filename|g" "$doc_path"
+    if ! cp "$template_path" "$doc_path"; then
+        log "Error: Failed to copy template to: $doc_path"
+        exit 1
+    fi
+    
+    if ! sed -i "s|{{FILENAME}}|$BASENAME|g" "$doc_path"; then
+        log "Error: Failed to substitute filename in template: $doc_path"
+        exit 1
+    fi
 }
 
-# Main execution
-main() {
-    log "Starting documentation generation hook"
-    
-    # Load environment variables
-    load_env
-    
-    # Read JSON input from stdin
+# Cache global variables to avoid repeated calculations
+PROJECT_ROOT=""
+FILE_PATH=""
+BASENAME=""
+RELATIVE_PATH=""
+
+# Function to initialize cached variables
+init_cache() {
+    local file_path="$1"
+    PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+    FILE_PATH="$file_path"
+    BASENAME=$(basename "$file_path")
+    RELATIVE_PATH=$(get_relative_path "$file_path")
+}
+
+# Function to process JSON input and extract file path
+process_json_input() {
     local json_input=""
     if [ -t 0 ]; then
         log "No input provided"
@@ -175,7 +255,6 @@ main() {
         json_input=$(cat)
     fi
     
-    # Extract file path from JSON
     local file_path=$(extract_file_path "$json_input")
     
     if [ -z "$file_path" ]; then
@@ -183,7 +262,12 @@ main() {
         exit 1
     fi
     
-    log "Processing file: $file_path"
+    echo "$file_path"
+}
+
+# Function to validate file for processing
+validate_file() {
+    local file_path="$1"
     
     # Check if file should be included based on patterns
     if ! should_include_file "$file_path"; then
@@ -196,6 +280,11 @@ main() {
         log "Warning: File does not exist: $file_path"
         exit 0
     fi
+}
+
+# Function to handle documentation workflow
+handle_documentation() {
+    local file_path="$1"
     
     # Create documentation directory
     local doc_dir=$(create_doc_directory "$file_path")
@@ -204,35 +293,55 @@ main() {
     
     # Check if documentation already exists
     if [ -f "$doc_path" ]; then
-        log "Documentation already exists: $doc_path"
-        # Update the timestamp in existing documentation
-        sed -i "s|^\*\*Last Updated:\*\* .*|**Last Updated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")|" "$doc_path"
-        
-        # Get project root directory and read update prompt
-        local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-        local update_prompt_path="$project_root/$COGENT_PROMPT_UPDATE"
-        local relative_doc_path=$(get_relative_path "$doc_path")
-        local update_prompt=$(cat "$update_prompt_path" | sed "s|{{FILENAME}}|$(basename "$file_path")|g" | sed "s|{{DOC_PATH}}|$relative_doc_path|g" | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
-        
-        # Use proper Claude Code hook feedback mechanism
-        cat <<EOF
+        handle_existing_documentation "$doc_path"
+    else
+        handle_new_documentation "$doc_path"
+    fi
+}
+
+# Function to handle existing documentation update
+handle_existing_documentation() {
+    local doc_path="$1"
+    
+    log "Documentation already exists: $doc_path"
+    # Update the timestamp in existing documentation
+    sed -i "s|^\*\*Last Updated:\*\* .*|**Last Updated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")|" "$doc_path"
+    
+    # Read update prompt and substitute variables
+    local update_prompt_path="$PROJECT_ROOT/$COGENT_PROMPT_UPDATE"
+    if [ ! -f "$update_prompt_path" ]; then
+        log "Error: Update prompt file not found: $update_prompt_path"
+        exit 1
+    fi
+    local relative_doc_path=$(get_relative_path "$doc_path")
+    local update_prompt=$(substitute_template_vars "$(cat "$update_prompt_path")" "$BASENAME" "$relative_doc_path")
+    
+    # Use proper Claude Code hook feedback mechanism
+    cat <<EOF
 {
   "decision": "block",
   "reason": $update_prompt"
 }
 EOF
-        exit 0
-    fi
+    exit 0
+}
+
+# Function to handle new documentation creation
+handle_new_documentation() {
+    local doc_path="$1"
     
     # Create documentation template
-    create_documentation_template "$file_path" "$doc_path"
+    create_documentation_template "$FILE_PATH" "$doc_path"
     
     log "Created documentation template: $doc_path"
     
-    # Get project root directory and read default prompt
-    local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-    local prompt_path="$project_root/$COGENT_PROMPT_CREATE"
-    local prompt=$(cat "$prompt_path" | sed "s|{{FILENAME}}|$(basename "$file_path")|g" | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/"/\\"/g')
+    # Read default prompt and substitute variables
+    local prompt_path="$PROJECT_ROOT/$COGENT_PROMPT_CREATE"
+    if [ ! -f "$prompt_path" ]; then
+        log "Error: Create prompt file not found: $prompt_path"
+        exit 1
+    fi
+    local prompt=$(substitute_template_vars "$(cat "$prompt_path")" "$BASENAME")
     
     # Use proper Claude Code hook feedback mechanism - block and direct to fill template
     cat <<EOF
@@ -241,6 +350,28 @@ EOF
   "reason": "Created documentation template at $doc_path. $prompt"
 }
 EOF
+}
+
+# Main execution
+main() {
+    log "Starting documentation generation hook"
+    
+    # Load environment variables
+    load_env
+    
+    # Process JSON input and extract file path
+    local file_path=$(process_json_input)
+    
+    # Initialize cached variables
+    init_cache "$file_path"
+    
+    log "Processing file: $FILE_PATH"
+    
+    # Validate file for processing
+    validate_file "$FILE_PATH"
+    
+    # Handle documentation workflow
+    handle_documentation "$FILE_PATH"
 }
 
 # Run main function
