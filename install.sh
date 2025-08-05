@@ -146,7 +146,7 @@ setup_cogent_directory() {
 # Relative paths from project root
 
 # Main documentation template
-COGENT_TEMPLATE_MAIN="templates/default.md"
+COGENT_TEMPLATE_MAIN="templates/default-template.md"
 
 # Prompt for creating new documentation
 COGENT_PROMPT_CREATE="templates/default-prompt.md"
@@ -172,10 +172,10 @@ EOF
     fi
     
     # Download template files
-    local default_template_url="${REPO_URL}/templates/default.md"
+    local default_template_url="${REPO_URL}/templates/default-template.md"
     local default_prompt_url="${REPO_URL}/templates/default-prompt.md"
     local update_prompt_url="${REPO_URL}/templates/update-prompt.md"
-    local default_template_path="${templates_dir}/default.md"
+    local default_template_path="${templates_dir}/default-template.md"
     local default_prompt_path="${templates_dir}/default-prompt.md"
     local update_prompt_path="${templates_dir}/update-prompt.md"
     
@@ -438,11 +438,8 @@ create_gitignore_entries() {
     log_step "Updating .gitignore..."
     
     local gitignore_entries=(
-        "# Cogent AutoDoc - Documentation templates (commit these)"
+        "# Cogent AutoDoc - Generated documentation"
         ".cogent/"
-        ""
-        "# Cogent AutoDoc - Exclude if you don't want to commit docs"
-        "# .cogent/"
     )
     
     if [[ -f ".gitignore" ]]; then
