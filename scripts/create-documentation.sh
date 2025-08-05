@@ -320,7 +320,7 @@ handle_existing_documentation() {
     cat <<EOF
 {
   "decision": "block",
-  "reason": $update_prompt"
+  "reason": "$update_prompt"
 }
 EOF
     exit 0
