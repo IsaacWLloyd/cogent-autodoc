@@ -7,13 +7,23 @@
 set -euo pipefail
 
 # Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+if [[ -n "${NO_COLOR:-}" ]]; then
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    PURPLE=''
+    CYAN=''
+    NC=''
+else
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    PURPLE='\033[0;35m'
+    CYAN='\033[0;36m'
+    NC='\033[0m' # No Color
+fi
 
 # Configuration
 REPO_URL="https://raw.githubusercontent.com/IsaacWLloyd/cogent-autodoc/main"
@@ -46,15 +56,12 @@ log_step() {
 print_banner() {
     echo -e "${CYAN}"
     cat << 'EOF'
-   ____                        _      _         _        ____             
-  / ___|___   __ _  ___ _ __ __| |_   / \  _   _| |_ ___ |  _ \  ___   ___ 
- | |   / _ \ / _` |/ _ \ '_ ` _ \| __| / _ \| | | | __/ _ \| | | |/ _ \ / __|
- | |__| (_) | (_| |  __/ | | | | |_ / ___ \ |_| | || (_) | |_| | (_) | (__ 
-  \____\___/ \__, |\___|_| |_| |\__/_/   \_\__,_|\__\___/|____/ \___/ \___|
-             |___/                                                         
+=========================================
+    C O G E N T   A U T O D O C  
+  Automated Documentation Generation
+=========================================
 EOF
     echo -e "${NC}"
-    echo -e "${CYAN}Automated Documentation Generation for Claude Code${NC}"
     echo
 }
 
@@ -542,10 +549,11 @@ show_usage_instructions() {
     echo "   .cogent/[relative-path-to-file].md"
     echo
     echo -e "${YELLOW}3. Configuration:${NC}"
-    echo -e "   ${GREEN}▶ Run: cogent-config --interactive${NC} (if installed globally)"
-    echo -e "   ${GREEN}▶ Or: .cogent/bin/cogent-config --interactive${NC} (project-local)"
+    echo -e "   ${GREEN}▶ Use the configuration tool to customize settings:${NC}"
+    echo -e "   ${GREEN}▶ cogent-config --interactive${NC} (if installed globally)"
+    echo -e "   ${GREEN}▶ .cogent/bin/cogent-config --interactive${NC} (project-local)"
     echo "   - Manage .gitignore settings"
-    echo "   - Configure version history"
+    echo "   - Configure version history" 
     echo "   - Edit custom templates"
     echo "   - View and reset settings"
     echo
@@ -562,53 +570,6 @@ show_usage_instructions() {
     echo -e "${CYAN}For more information: https://github.com/IsaacWLloyd/cogent-autodoc${NC}"
 }
 
-interactive_setup() {
-    local project_type="$1"
-    
-    echo
-    log_step "Interactive Setup"
-    echo
-    
-    # Ask about documentation preferences
-    echo -e "${YELLOW}Documentation Preferences:${NC}"
-    echo "1. Comprehensive (detailed docs for all files)"
-    echo "2. Selective (docs only for important files)" 
-    echo "3. Minimal (basic structure only)"
-    echo -n "Choose documentation level (1-3, default: 1): "
-    read -r doc_level
-    doc_level=${doc_level:-1}
-    
-    # Ask about file exclusions
-    echo
-    echo -e "${YELLOW}File Exclusions:${NC}"
-    echo "Current exclusions: .md, .json, .yml, node_modules, dist, __pycache__"
-    echo -n "Add custom exclusions (comma-separated, or press Enter to skip): "
-    read -r custom_exclusions
-    
-    # Ask about template customization
-    echo
-    echo -e "${YELLOW}Template Customization:${NC}"
-    echo -n "Customize documentation template for $project_type? (y/N): "
-    read -r customize_template
-    
-    if [[ "$customize_template" =~ ^[Yy]$ ]]; then
-        log_info "Template customization will be available in future versions"
-        log_info "For now, edit .cogent/create-documentation.sh manually"
-    fi
-    
-    # Save preferences (for future use)
-    cat > "${INSTALL_DIR}/config.json" << EOF
-{
-  "project_type": "$project_type",
-  "documentation_level": $doc_level,
-  "custom_exclusions": "$custom_exclusions",
-  "template_customized": false,
-  "installed_at": "$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
-}
-EOF
-    
-    log_success "Configuration saved to ${INSTALL_DIR}/config.json"
-}
 
 main() {
     print_banner
@@ -626,52 +587,35 @@ main() {
     
     check_dependencies
     
-    local project_type
-    project_type=$(detect_project_type)
+    detect_project_type >/dev/null
     
     setup_cogent_directory
     setup_claude_settings
     create_gitignore_entries
     
-    # Ask if user wants interactive setup
-    echo
-    echo -n "Run interactive setup for advanced configuration? (y/N): "
-    read -r interactive
-    
-    if [[ "$interactive" =~ ^[Yy]$ ]]; then
-        interactive_setup "$project_type"
-    fi
-    
     show_usage_instructions
     
-    # Prompt user to configure settings
+    # Show configuration information
     echo
     echo -e "${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}🚀 Quick Start: Configure Your Settings${NC}"
+    echo -e "${CYAN}🚀 Next Steps: Configure Your Settings${NC}"
     echo -e "${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
-    echo -n "Would you like to configure Cogent AutoDoc settings now? (Y/n): "
-    read -r configure_now
-    
-    if [[ ! "$configure_now" =~ ^[Nn]$ ]]; then
-        echo
-        log_step "Launching configuration tool..."
-        
-        # Try global command first, then fallback to local
-        if command -v cogent-config &> /dev/null; then
-            cogent-config --interactive
-        else
-            "./${INSTALL_DIR}/bin/cogent-config" --interactive
-        fi
+    echo -e "${YELLOW}Configure Cogent AutoDoc settings using the configuration tool:${NC}"
+    echo
+    if command -v cogent-config &> /dev/null; then
+        echo -e "  ${GREEN}cogent-config --interactive${NC}"
     else
-        echo
-        log_info "You can configure settings later by running:"
-        if command -v cogent-config &> /dev/null; then
-            echo -e "  ${GREEN}cogent-config --interactive${NC}"
-        else
-            echo -e "  ${GREEN}.cogent/bin/cogent-config --interactive${NC}"
-        fi
+        echo -e "  ${GREEN}.cogent/bin/cogent-config --interactive${NC}"
     fi
+    echo
+    echo -e "${CYAN}This tool allows you to:${NC}"
+    echo "  • Manage .gitignore settings for .cogent/"
+    echo "  • Configure version history settings"
+    echo "  • Create and edit custom templates"
+    echo "  • View current configuration"
+    echo "  • Reset to default settings"
+    echo
 }
 
 # Handle command line arguments
