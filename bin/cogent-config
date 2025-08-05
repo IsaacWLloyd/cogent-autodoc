@@ -481,6 +481,9 @@ show_help() {
     echo
     echo -e "${YELLOW}TIP:${NC} Use --interactive for the best experience with guided menus"
     echo
+    echo -e "${YELLOW}NOTE:${NC} For Claude to benefit from generated documentation, ensure your CLAUDE.md"
+    echo "includes instructions to reference .cogent/ files for context."
+    echo
     echo "For more information: https://github.com/IsaacWLloyd/cogent-autodoc"
 }
 

@@ -536,6 +536,70 @@ create_gitignore_entries() {
     fi
 }
 
+update_claude_md() {
+    log_step "Updating CLAUDE.md..."
+    
+    local claude_md_file="CLAUDE.md"
+    local cogent_section="## Cogent AutoDoc
+For context about any file, check \`.cogent/[relative-path-to-file].md\` unless you're completely confident about its purpose and implementation."
+    
+    if [[ -f "$claude_md_file" ]]; then
+        # Check if Cogent AutoDoc section already exists
+        if grep -q "## Cogent AutoDoc" "$claude_md_file"; then
+            log_info "CLAUDE.md already contains Cogent AutoDoc section"
+            return 0
+        fi
+        
+        # Find insertion point after first # header and its content
+        local temp_file="${claude_md_file}.tmp"
+        local found_first_header=false
+        local inserted=false
+        
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            echo "$line" >> "$temp_file"
+            
+            # If we found the first # header but haven't inserted yet
+            if [[ "$found_first_header" == true && "$inserted" == false ]]; then
+                # Check if this line starts a new ## section or we're at EOF
+                if [[ "$line" =~ ^##[[:space:]] ]] || [[ -z "$line" && $(wc -l < "$temp_file") -gt 1 ]]; then
+                    # Insert our section before this line
+                    if [[ "$line" =~ ^##[[:space:]] ]]; then
+                        # Remove the last line we just added, insert our section, then add it back
+                        sed -i '$d' "$temp_file"
+                        echo "" >> "$temp_file"
+                        echo "$cogent_section" >> "$temp_file"
+                        echo "" >> "$temp_file"
+                        echo "$line" >> "$temp_file"
+                    else
+                        echo "" >> "$temp_file"
+                        echo "$cogent_section" >> "$temp_file"
+                    fi
+                    inserted=true
+                fi
+            fi
+            
+            # Mark when we've found the first # header
+            if [[ "$line" =~ ^#[[:space:]] && "$found_first_header" == false ]]; then
+                found_first_header=true
+            fi
+            
+        done < "$claude_md_file"
+        
+        # If we never found a good insertion point, append to end
+        if [[ "$inserted" == false ]]; then
+            echo "" >> "$temp_file"
+            echo "$cogent_section" >> "$temp_file"
+        fi
+        
+        mv "$temp_file" "$claude_md_file"
+        log_success "Added Cogent AutoDoc section to existing CLAUDE.md"
+    else
+        # Create new CLAUDE.md file
+        echo "$cogent_section" > "$claude_md_file"
+        log_success "Created CLAUDE.md with Cogent AutoDoc section"
+    fi
+}
+
 show_usage_instructions() {
     echo
     log_success "Installation complete!"
@@ -592,6 +656,7 @@ main() {
     setup_cogent_directory
     setup_claude_settings
     create_gitignore_entries
+    update_claude_md
     
     show_usage_instructions
     
