@@ -99,9 +99,9 @@ load_env() {
     else
         log "Warning: .cogent/.env file not found, using default paths"
         # Set defaults if .env doesn't exist
-        export COGENT_TEMPLATE_MAIN="templates/default-template.md"
-        export COGENT_PROMPT_CREATE="templates/default-prompt.md"
-        export COGENT_PROMPT_UPDATE="templates/update-prompt.md"
+        export COGENT_TEMPLATE_MAIN=".cogent/templates/default-template.md"
+        export COGENT_PROMPT_CREATE=".cogent/templates/default-prompt.md"
+        export COGENT_PROMPT_UPDATE=".cogent/templates/update-prompt.md"
     fi
 }
 

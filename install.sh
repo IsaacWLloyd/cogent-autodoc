@@ -146,13 +146,13 @@ setup_cogent_directory() {
 # Relative paths from project root
 
 # Main documentation template
-COGENT_TEMPLATE_MAIN="templates/default-template.md"
+COGENT_TEMPLATE_MAIN=".cogent/templates/default-template.md"
 
 # Prompt for creating new documentation
-COGENT_PROMPT_CREATE="templates/default-prompt.md"
+COGENT_PROMPT_CREATE=".cogent/templates/default-prompt.md"
 
 # Prompt for updating existing documentation
-COGENT_PROMPT_UPDATE="templates/update-prompt.md"
+COGENT_PROMPT_UPDATE=".cogent/templates/update-prompt.md"
 EOF
         log_success "Created .env configuration file"
     else
