@@ -137,26 +137,25 @@ setup_cogent_directory() {
         log_success "Created templates directory"
     fi
     
-    # Create .env file with default paths
+    # Download and install .env.example, then copy to .env if it doesn't exist
+    local env_example_url="${REPO_URL}/.env.example"
+    local env_example_path="${INSTALL_DIR}/.env.example"
     local env_file="${INSTALL_DIR}/.env"
-    if [[ ! -f "$env_file" ]]; then
-        log_info "Creating .env configuration file..."
-        cat > "$env_file" << 'EOF'
-# Cogent AutoDoc Template Configuration
-# Relative paths from project root
-
-# Main documentation template
-COGENT_TEMPLATE_MAIN=".cogent/templates/default-template.md"
-
-# Prompt for creating new documentation
-COGENT_PROMPT_CREATE=".cogent/templates/default-prompt.md"
-
-# Prompt for updating existing documentation
-COGENT_PROMPT_UPDATE=".cogent/templates/update-prompt.md"
-EOF
-        log_success "Created .env configuration file"
+    
+    log_info "Downloading .env.example configuration file..."
+    if download_file "$env_example_url" "$env_example_path"; then
+        log_success ".env.example configuration file downloaded"
+        
+        # Copy to .env if it doesn't exist
+        if [[ ! -f "$env_file" ]]; then
+            cp "$env_example_path" "$env_file"
+            log_success "Created .env configuration file from .env.example"
+        else
+            log_info ".env configuration file already exists"
+        fi
     else
-        log_info ".env configuration file already exists"
+        log_error "Failed to download .env.example configuration file"
+        exit 1
     fi
     
     # Download the documentation script

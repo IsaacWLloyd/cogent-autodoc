@@ -63,6 +63,37 @@ generate_doc_filename() {
     echo "${filename}.md"
 }
 
+# Function to check if file should be included based on patterns
+should_include_file() {
+    local file_path="$1"
+    local filename=$(basename "$file_path")
+    
+    # Always skip certain directories and files
+    if [[ "$file_path" =~ /\.(cogent|claude|git)/ ]] || \
+       [[ "$file_path" =~ /(node_modules|dist|build|__pycache__|target|bin|obj)/ ]]; then
+        return 1
+    fi
+    
+    # Skip if COGENT_INCLUDE_PATTERNS is not set
+    if [ -z "${COGENT_INCLUDE_PATTERNS:-}" ]; then
+        return 1
+    fi
+    
+    # Convert comma-separated patterns to array
+    IFS=',' read -ra patterns <<< "$COGENT_INCLUDE_PATTERNS"
+    
+    # Check if filename matches any pattern
+    for pattern in "${patterns[@]}"; do
+        # Remove leading/trailing whitespace
+        pattern=$(echo "$pattern" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        if [[ "$filename" == $pattern ]]; then
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
 # Function to determine file type
 get_file_type() {
     local file_path="$1"
@@ -90,18 +121,26 @@ get_file_type() {
 load_env() {
     local project_root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
     local env_file="$project_root/.cogent/.env"
+    local env_example_file="$project_root/.cogent/.env.example"
     
     if [ -f "$env_file" ]; then
         # Export variables from .env file
         set -a
         source "$env_file"
         set +a
+    elif [ -f "$env_example_file" ]; then
+        log "Warning: .cogent/.env file not found, using .env.example"
+        # Export variables from .env.example file
+        set -a
+        source "$env_example_file"
+        set +a
     else
-        log "Warning: .cogent/.env file not found, using default paths"
-        # Set defaults if .env doesn't exist
+        log "Warning: Neither .cogent/.env nor .cogent/.env.example found, using defaults"
+        # Set defaults if neither file exists
         export COGENT_TEMPLATE_MAIN=".cogent/templates/default-template.md"
         export COGENT_PROMPT_CREATE=".cogent/templates/default-prompt.md"
         export COGENT_PROMPT_UPDATE=".cogent/templates/update-prompt.md"
+        export COGENT_INCLUDE_PATTERNS="*.py,*.js,*.ts,*.tsx,*.jsx,*.java,*.cpp,*.cc,*.cxx,*.c,*.h,*.hpp,*.go,*.rs,*.rb,*.php,*.swift,*.kt,*.scala,*.cs"
     fi
 }
 
@@ -146,11 +185,9 @@ main() {
     
     log "Processing file: $file_path"
     
-    # Check if file should be skipped
-    if [[ "$file_path" =~ \.(md|json|yml|yaml|toml|lock|gitignore|env)$ ]] || \
-       [[ "$file_path" =~ /\.(cogent|claude|git)/ ]] || \
-       [[ "$file_path" =~ /(node_modules|dist|__pycache__)/ ]]; then
-        log "Skipping file based on exclusion rules: $file_path"
+    # Check if file should be included based on patterns
+    if ! should_include_file "$file_path"; then
+        log "Skipping file based on inclusion patterns: $file_path"
         exit 0
     fi
     
@@ -181,7 +218,7 @@ main() {
         cat <<EOF
 {
   "decision": "block",
-  "reason": "Documentation already exists at $relative_doc_path. $update_prompt"
+  "reason": $update_prompt"
 }
 EOF
         exit 0
