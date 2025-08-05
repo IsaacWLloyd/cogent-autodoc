@@ -169,5 +169,3 @@ MIT License - see [LICENSE](LICENSE) for details.
 ```bash
 curl -fsSL https://raw.githubusercontent.com/IsaacWLloyd/cogent-autodoc/main/install.sh | bash
 ```
-
-Join the community: **[discord.gg/krmUwwNhsp](https://discord.gg/krmUwwNhsp)**
